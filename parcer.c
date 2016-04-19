@@ -29,51 +29,107 @@ int eat(char *expression, int charToEat) {
 	return 0;
 }
 
-double internalParse(char *expression) {
+int internalParse(char *expression, double *res) {
+	int error = 0;
+	
 	nextChar(expression);
-	double x = parseExpression(expression);
-	if (pos < (int)strlen(expression)) return 0.001; // TODO throws errors
-	return x;
+	error = parseExpression(expression, res);
+	if (pos < (int)strlen(expression) && !error) error = CANNOT_PARSE;
+	
+	return error;
 }
 
-double parseExpression(char *expression) {
-	double x = parseTerm(expression);
+int parseExpression(char *expression, double *res) {
+	double x = *res;
+	int error = parseTerm(expression, res);
+
+	for (;;) {
+		if (error) {
+			return error;
+		}
+
+		if (eat(expression, '+')) {
+			error = parseTerm(expression, &x); // addition
+			*res += x;
+		} else if (eat(expression, '-')) {
+			error = parseTerm(expression, &x); // subtraction
+			*res -= x;
+		} else {
+			return error;
+		}
+	}
+}
+
+int parseTerm(char *expression, double *res) {
+	double x = *res;
+	int error = parseFactor(expression, res);
 	
 	for (;;) {
-		if (eat(expression, '+')) x += parseTerm(expression); // addition
-		else if (eat(expression, '-')) x -= parseTerm(expression); // subtraction
-		else return x;
+		if (error) {
+			return error;
+		}
+
+		if (eat(expression, '*')) {
+			error = parseFactor(expression, &x); // multiplication
+			*res *= x;
+		} else if (eat(expression, '/')) {
+			error = parseFactor(expression, &x); // division
+			if (fabs(x) < 0.00001) {
+				error = DIVISION_BY_ZERO;
+			} else {
+				*res /= x;
+			}
+		} else {
+			return error;
+		}
 	}
 }
 
-double parseTerm(char *expression) {
-	double x = parseFactor(expression);
-	for (;;) {
-		if (eat(expression, '*')) x *= parseFactor(expression); // multiplication
-		else if (eat(expression, '/')) x /= parseFactor(expression); // division
-		else return x;
-	}
-}
-
-double parseFactor(char *expression) {
-	if (eat(expression, '+')) return parseFactor(expression); // unary plus
-	if (eat(expression, '-')) return -parseFactor(expression); // unary minus
+int parseFactor(char *expression, double *res) {
+	int error = 0;
+	int startPos = 0;
 
 	double x = 0.0;
-	int startPos = pos;
+	double y = 0.0;
+
+	if (eat(expression, '+')) {
+		error = parseFactor(expression, res); // unary plus
+		*res = +(*res);
+		
+		return error;
+	}
+	
+	if (eat(expression, '-')) {
+		error = parseFactor(expression, res); // unary minus
+		*res = -(*res);
+		
+		return error;
+	}
+
+	startPos = pos;
+
 	if (eat(expression, '(')) { // parentheses
-		x = parseExpression(expression);
+		error = parseExpression(expression, &x);
 		eat(expression, ')');
 	} else if (isdigit(ch) || ch == '.' || (ch == 'e' && isdigit(pch)) || (ch == '-' && pch == 'e')) { // numbers
-		while (isdigit(ch) || ch == '.' || (ch == 'e' && isdigit(pch)) || (ch == '-' && pch == 'e')) nextChar(expression);
-		char *sub = substring(expression, startPos, pos);
+		while (isdigit(ch) || ch == '.' || (ch == 'e' && isdigit(pch)) || (ch == '-' && pch == 'e')) {
+			nextChar(expression);
+		}
+		
+		char *sub = substring(expression, startPos, pos - startPos);
+		if (sub == NULL) {
+			return MEMORY_ERROR;
+		}
 
 		x = atof(sub);
 
 		free(sub);
 	} else if (isalpha(ch)) { // functions
 		while (isalpha(ch)) nextChar(expression);
-		char *func = substring(expression, startPos, pos);
+		char *func = substring(expression, startPos, pos - startPos);
+		if (func == NULL) {
+			return MEMORY_ERROR;
+		}
 
 		if (!strcmp(func, "e")) {
 			x = M_E;
@@ -82,37 +138,81 @@ double parseFactor(char *expression) {
 			x = M_PI;
 		}
 		else {
-			x = parseFactor(expression);
+			error = parseFactor(expression, &x);
+			if (error) {
+				free(func);
+				return error;
+			}
 
-			if (!strcmp(func, "sqrt")) x = sqrt(x);
+			if (!strcmp(func, "sqrt")) {
+				if (x < 0) {
+					error = ILLEGAL_SQRT_ARG;
+				} else {
+					x = sqrt(x);
+				}
+			}
 			else if (!strcmp(func, "sin")) x = sin(x);
-			else if (!strcmp(func, "arcsin")) x = asin(x);
-			else if (!strcmp(func, "arccos")) x = acos(x);
+			else if (!strcmp(func, "arcsin")) {
+				if (x < -1 || x > 1) {
+					error = ILLEGAL_ASIN_ARG;
+				} else {
+					x = asin(x);
+				}
+			}
+			else if (!strcmp(func, "arccos")) {
+				if (x < -1 || x > 1) {
+					error = ILLEGAL_ACOS_ARG;
+				} else {
+					x = acos(x);
+				}
+			}
 			else if (!strcmp(func, "arctg")) x = atan(x);
 			else if (!strcmp(func, "cos")) x = cos(x);
-			else if (!strcmp(func, "tg")) x = tan(x);
-			else if (!strcmp(func, "ln")) x = log(x);
+			else if (!strcmp(func, "tg")) {
+				if (fabs(cos(x)) < 0.00001) {
+					error = ILLEGAL_TG_ARG;
+				} else {
+					x = tan(x);
+				}
+			}
+			else if (!strcmp(func, "ctg")) {
+				if (fabs(sin(x)) < 0.00001) {
+					error = ILLEGAL_CTG_ARG;
+				} else {
+					x = 1 / tan(x);
+				}
+			}
+			else if (!strcmp(func, "ln")) {
+				if (x <= 0) {
+					error = ILLEGAL_LOG_ARG;
+				} else {
+					x = log(x);
+				}
+			}
 			else if (!strcmp(func, "floor")) x = floor(x);
 			else if (!strcmp(func, "ceil")) x = ceil(x);
 			else {
-				// TODO UNKNOWN_FUNCTION
+				error = UNKNOWN_FUNCTION;
 			}
 		}
 
 		free(func);
 	}
 	else {
-		// TODO CANNOT_PARSE
+		error = CANNOT_PARSE;
 	}
 
-	if (eat(expression, '^')) x = pow(x, parseFactor(expression)); // exponentiation
+	if (eat(expression, '^')) {
+		error = parseFactor(expression, &y);
+		x = pow(x, y); // exponentiation
+	}
 
-	return x;
+	*res = x;
+
+	return error;
 }
 
 int parse(char *expression, double *res) {
 	pos = -1;
-	*res = internalParse(expression);
-	
-	return 0;
+	return internalParse(expression, res);
 }

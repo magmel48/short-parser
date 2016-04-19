@@ -32,7 +32,7 @@ char* substring(char*, int, int);
 
 void nextChar();
 int parse(char *, double *);
-double internalParse();
-double parseExpression();
-double parseTerm();
-double parseFactor();
+int internalParse();
+int parseExpression();
+int parseTerm();
+int parseFactor();
