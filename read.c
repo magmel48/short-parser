@@ -1,7 +1,7 @@
 #include <crtdbg.h>
 #include "parser.h"
 
-char* readLn(FILE *input)
+int readLn(FILE *input, char **string)
 {
 	int n;
 	int i, j;
@@ -14,7 +14,7 @@ char* readLn(FILE *input)
 	if (s == NULL)
 	{
 		printf("ERROR can not allocate memory for new string");
-		exit(1);
+		return MEMORY_ERROR;
 	}
 
 	for (j = 0; j < n; j++)
@@ -34,6 +34,7 @@ char* readLn(FILE *input)
 			if (strlen(s) == 0)
 			{
 				free(s);
+				*string = NULL;
 				return NULL;
 			}
 
@@ -48,7 +49,7 @@ char* readLn(FILE *input)
 			{
 				printf("ERROR can not re-allocate memory for new characters");
 				free(s);
-				exit(1);
+				return MEMORY_ERROR;
 			}
 			else
 			{
@@ -61,7 +62,9 @@ char* readLn(FILE *input)
 		++i;
 	}
 
-	return s;
+	*string = s;
+	
+	return 0;
 }
 
 int isWhiteSpace(char symbol)
@@ -159,13 +162,15 @@ int main(int argc, char* argv[])
 
 	for (;;)
 	{
-		string = readLn(input);
+		error = readLn(input, &string);
 
-		if (string == NULL)
+		if (error)
+		{
+			printf("%s == ERROR memory error\n", string);
+		} else if (string == NULL)
 		{
 			break;
-		}
-		if (isComment(string) || isEmpty(string))
+		} else if (isComment(string) || isEmpty(string))
 		{
 			puts(string);
 		}
@@ -222,6 +227,7 @@ int main(int argc, char* argv[])
 				}
 			}
 		}
+		
 		free(string);
 	}
 

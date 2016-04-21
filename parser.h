@@ -25,8 +25,11 @@ typedef enum {
 } ERROR;
 
 static int pos = -1;
-static char ch;
+
 static char pch;
+static char ch;
+static char nch;
+static char n2ch;
 
 char* substring(char*, int, int);
 
